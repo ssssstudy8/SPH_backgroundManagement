@@ -9,14 +9,24 @@ import {
   removeToken
 } from '@/utils/auth'
 import {
-  resetRouter
+  anyRoutes,
+  asyncRoutes,
+  resetRouter,
+  constantRoutes
 } from '@/router'
+import router from '@/router'
 
 const getDefaultState = () => {
   return {
     token: getToken(),
     name: '',
-    avatar: ''
+    avatar: '',
+    routes: [],
+    buttons: [],
+    roles: [],
+    //对比之后，项目中已有的异步路由，与服务器返回的标记信息进行对比最终需要展示的路由
+    resultAsyncRoutes: [],
+    resultAllRoutes: []
   }
 }
 
@@ -29,13 +39,41 @@ const mutations = {
   SET_TOKEN: (state, token) => {
     state.token = token
   },
-  SET_NAME: (state, name) => {
-    state.name = name
+  //存储用户信息
+  SET_USERINFO: (state, userInfo) => {
+    state.name = userInfo.name
+    state.avatar = userInfo.avatar
+    state.routes = userInfo.routes
+    state.buttons = userInfo.buttons
+    state.roles = userInfo.roles
   },
-  SET_AVATAR: (state, avatar) => {
-    state.avatar = avatar
+  //最终计算出的异步路由
+  SET_RESULTASYNCROUTES: (state, asyncRoutes) => {
+    //保存当前用户的异步路由
+    state.resultAsyncRoutes = asyncRoutes
+    //计算当前用户需要展示所有路由
+    state.resultAllRoutes = constantRoutes.concat(state.resultAsyncRoutes, anyRoutes)
+    //给路由器添加新的路由
+    router.addRoutes(state.resultAllRoutes)
   }
 }
+
+
+//定义一个函数，两个数组对比，对比出当前用户到底显示哪些异步路由
+const computedAsyncRoutes = (asyncRoutes, routes) => {
+  return asyncRoutes.filter(item => {
+    //没有元素返回-1
+    if (routes.indexOf(item.name) != -1) {
+      //递归
+      if (item.children && item.children.length) {
+        item.children = computedAsyncRoutes(item.children, routes)
+      }
+      return true
+    }
+  })
+}
+
+
 
 const actions = {
   // user login
@@ -59,7 +97,7 @@ const actions = {
     }
   },
 
-  // get user info
+  //获取用户信息
   getInfo({
     commit,
     state
@@ -69,18 +107,8 @@ const actions = {
         const {
           data
         } = response
-
-        if (!data) {
-          return reject('Verification failed, please Login again.')
-        }
-
-        const {
-          name,
-          avatar
-        } = data
-
-        commit('SET_NAME', name)
-        commit('SET_AVATAR', avatar)
+        commit('SET_USERINFO', data)
+        commit('SET_RESULTASYNCROUTES', computedAsyncRoutes(asyncRoutes, data.routes))
         resolve(data)
       }).catch(error => {
         reject(error)
